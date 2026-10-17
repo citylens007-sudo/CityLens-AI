@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+var/
+backend/citylens_api.egg-info/
