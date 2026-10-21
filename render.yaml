@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: backend
     plan: starter
-    buildCommand: pip install .
+    buildCommand: pip install -r requirements.txt
     preDeployCommand: python -m alembic -c alembic.ini upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /ready

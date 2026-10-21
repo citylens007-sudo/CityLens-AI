@@ -120,7 +120,7 @@ Leaflet, React-Leaflet, Recharts, and Lucide React are installed for the fronten
 
 ### Configure Render
 
-1. Push this repository to a private or public Git provider of your choice and create a Render Blueprint from its root `render.yaml`. The service uses `backend` as its root, installs the normal backend dependencies, binds to Render’s `$PORT`, and checks `/ready`.
+1. Push this repository to a private or public Git provider of your choice and create a Render Blueprint from its root `render.yaml`. The service uses `backend` as its root, installs the production dependencies from `backend/requirements.txt` with `pip install -r requirements.txt`, binds to Render’s `$PORT`, and checks `/ready`.
 2. Configure every Blueprint prompt marked `sync: false` in the Render service dashboard. Required core values:
    - `DATABASE_URL`: Neon pooled URL.
    - `FRONTEND_ORIGINS`: exact Vercel custom frontend origin, e.g. `https://app.<your-domain>`; include another exact HTTPS origin only if you intentionally use it.
