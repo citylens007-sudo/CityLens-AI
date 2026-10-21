@@ -164,6 +164,7 @@ def _serialise_job(job: RoadDetectionJob, include_detections: bool = True) -> di
         "progress": job.progress,
         "status_message": job.status_message,
         "original_filename": job.original_filename,
+        "video_url": f"/api/v1/detection-jobs/{job.id}/video",
         "latitude": job.latitude,
         "longitude": job.longitude,
         "location_source": job.location_source,
@@ -523,6 +524,21 @@ def get_detection_job(job_id: UUID, actor: RoadEngineer, db: DatabaseSession) ->
     if not _job_accessible(job, actor):
         raise HTTPException(status_code=403, detail="You cannot access this video processing job")
     return _serialise_job(job)
+
+
+@router.get("/detection-jobs/{job_id}/video")
+def get_detection_video(job_id: UUID, actor: RoadEngineer, db: DatabaseSession) -> FileResponse:
+    job = db.get(RoadDetectionJob, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Video processing job not found")
+    if not _job_accessible(job, actor):
+        raise HTTPException(status_code=403, detail="You cannot access this video processing job")
+    root = settings.road_video_storage_path.resolve()
+    path = Path(job.video_path).resolve()
+    media_type = VIDEO_TYPES.get(path.suffix.lower())
+    if path.parent != root or media_type is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="Uploaded video is unavailable")
+    return FileResponse(path, media_type=media_type, content_disposition_type="inline")
 
 
 @router.get("/detection-jobs/{job_id}/evidence/{evidence_id}")

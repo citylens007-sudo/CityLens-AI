@@ -97,6 +97,40 @@ def test_detection_routes_require_engineer_authentication(video_client) -> None:
     ).status_code == 403
 
 
+def test_video_playback_is_authenticated_and_confined_to_private_storage(video_client) -> None:
+    client, user_ids, session_factory = video_client
+    video_path = settings.road_video_storage_path / "stored-video.mp4"
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video_path.write_bytes(b"\x00\x00\x00\x18ftypisom")
+    with session_factory() as db:
+        job = RoadDetectionJob(
+            uploaded_by=user_ids["engineer"],
+            original_filename="road.mp4",
+            video_path=str(video_path),
+        )
+        db.add(job)
+        db.commit()
+        job_id = job.id
+
+    assert client.get(f"/api/v1/detection-jobs/{job_id}/video").status_code == 401
+    _login(client)
+    playback = client.get(f"/api/v1/detection-jobs/{job_id}/video")
+    assert playback.status_code == 200
+    assert playback.content == b"\x00\x00\x00\x18ftypisom"
+    assert playback.headers["content-type"] == "video/mp4"
+
+    with session_factory() as db:
+        stored_job = db.get(RoadDetectionJob, job_id)
+        assert stored_job is not None
+        stored_job.video_path = str(video_path.parent.parent / "outside.mp4")
+        db.commit()
+    assert client.get(f"/api/v1/detection-jobs/{job_id}/video").status_code == 404
+
+    client.post("/api/v1/auth/logout")
+    _login(client, "video-maintenance@city.gov")
+    assert client.get(f"/api/v1/detection-jobs/{job_id}/video").status_code == 403
+
+
 def test_model_missing_keeps_detection_unavailable(video_client) -> None:
     client, _, _ = video_client
     _login(client)

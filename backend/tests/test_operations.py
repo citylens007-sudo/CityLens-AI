@@ -219,6 +219,12 @@ def test_evidence_upload_is_private_validated_and_uses_safe_storage(
     assert evidence["original_filename"] == "road.png"
     assert "file_path" not in evidence
     assert client.get(f"/api/evidence/{evidence['id']}").status_code == 200
+    gallery = client.get("/api/evidence/images")
+    assert gallery.status_code == 200
+    assert [item["id"] for item in gallery.json()["items"]] == [evidence["id"]]
+    preview = client.get(f"/api/evidence/{evidence['id']}/preview")
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/png"
     download = client.get(f"/api/evidence/{evidence['id']}/download")
     assert download.status_code == 200
     assert download.content.startswith(b"\x89PNG\r\n\x1a\n")
@@ -238,6 +244,7 @@ def test_evidence_upload_is_private_validated_and_uses_safe_storage(
     _login(client, "police@city.gov")
     assert client.get(f"/api/evidence/{evidence['id']}").status_code == 403
     assert client.get(f"/api/evidence/{evidence['id']}/download").status_code == 403
+    assert client.get("/api/evidence/images").status_code == 403
 
 
 def test_operations_require_auth_and_expose_root_health_and_docs(operations_client) -> None:

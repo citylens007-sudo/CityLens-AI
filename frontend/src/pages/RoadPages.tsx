@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  FileImage,
   FileVideo2,
   Filter,
+  Image as ImageIcon,
+  Images,
   MapPin,
   MapPinned,
+  RefreshCw,
   Search,
   ShieldCheck,
   Upload,
@@ -20,6 +24,7 @@ import type { DefectPriority, DefectReport } from '../types'
 import { Button, DemoTag, EmptyState, PageHeading, Panel, StatusBadge } from '../components/ui'
 import { MapView } from '../components/MapView'
 import {
+  ApiError,
   apiUrl,
   operationsApi,
   roadDetectionApi,
@@ -27,11 +32,70 @@ import {
   type RoadDetection,
   type RoadDetectionAvailability,
   type RoadDetectionJob,
+  type EvidenceRecord,
 } from '../services/api'
+import { geolocationErrorMessage, parseCoordinatePair, parseGpsSidecar } from '../services/location'
 
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024
+const MAX_IMAGE_SIZE = 25 * 1024 * 1024
 const MAX_SIDECAR_SIZE = 64 * 1024
 const allowedExtensions = ['.mp4', '.mov']
+const allowedImageTypes: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+}
+type GalleryFilter = 'All' | 'Videos' | 'Road Damage Photos' | 'AI Analysis'
+
+interface GalleryPhotoItem {
+  id: string
+  title: string
+  src: string
+  description: string
+  demo: boolean
+  credit?: string
+  sourceUrl?: string
+}
+
+const demoRoadPhotos: GalleryPhotoItem[] = [
+  {
+    id: 'demo-pothole',
+    title: 'Pothole road surface',
+    src: '/assets/demo/pothole-photo.jpg',
+    description: 'Licensed public sample · not a CityLens upload',
+    demo: true,
+    credit: 'Роман Рябенко · CC0',
+    sourceUrl: 'https://commons.wikimedia.org/wiki/File:A_pothole_in_Dilova_Street_in_Kyiv.jpg',
+  },
+  {
+    id: 'demo-cracked-asphalt',
+    title: 'Cracked asphalt road',
+    src: '/assets/demo/cracked-road-photo.jpg',
+    description: 'Licensed public sample · not a CityLens upload',
+    demo: true,
+    credit: 'Mnalis · CC BY-SA 4.0',
+    sourceUrl: 'https://commons.wikimedia.org/wiki/File:Old_cracked_asphalt_road,_Mu%C5%BEilov%C4%8Dica.jpg',
+  },
+  {
+    id: 'demo-surface-wear',
+    title: 'Damaged road surface',
+    src: '/assets/demo/surface-damage-photo.jpg',
+    description: 'Licensed public sample · not a CityLens upload',
+    demo: true,
+    credit: 'Goestratal! · CC BY-SA 4.0',
+    sourceUrl: 'https://commons.wikimedia.org/wiki/File:Stra%C3%9Fensch%C3%A4den_viele_Schlagl%C3%B6cher,_katastrophaler_Asphaltbelag_(2024-08-11)_05.jpg',
+  },
+]
+
+const demoVideo = {
+  title: 'Vehicles crossing a pothole · demo clip',
+  src: '/assets/demo/road-monitoring-demo.webm',
+  poster: '/assets/demo/road-monitoring-poster.jpg',
+  description: 'Publicly licensed example footage. It is not your city’s camera footage and has no CityLens AI analysis.',
+  credit: 'Amuzujoe · CC BY-SA 4.0',
+  sourceUrl: 'https://commons.wikimedia.org/wiki/File:Cars_Moving_into_pothole.webm',
+}
 
 function toDefectReport(defect: RoadDefect): DefectReport {
   return {
@@ -56,6 +120,7 @@ export function RoadMonitoringPage() {
   const [error, setError] = useState('')
   const [availability, setAvailability] = useState<RoadDetectionAvailability | null>(null)
   const [availabilityError, setAvailabilityError] = useState('')
+  const [availabilityLoading, setAvailabilityLoading] = useState(true)
   const [job, setJob] = useState<RoadDetectionJob | null>(null)
   const [recentJobs, setRecentJobs] = useState<RoadDetectionJob[]>([])
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -64,24 +129,65 @@ export function RoadMonitoringPage() {
   const [longitude, setLongitude] = useState('')
   const [locationVerified, setLocationVerified] = useState(false)
   const [gpsSidecar, setGpsSidecar] = useState<File | null>(null)
+  const [sidecarCoordinates, setSidecarCoordinates] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [sidecarError, setSidecarError] = useState('')
+  const [sidecarLoading, setSidecarLoading] = useState(false)
+  const [locationOrigin, setLocationOrigin] = useState<'device' | 'manual' | null>(null)
+  const [locationMessage, setLocationMessage] = useState('')
+  const [locationError, setLocationError] = useState('')
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const locationEditVersion = useRef(0)
   const [severity, setSeverity] = useState<RoadDefect['severity']>('Medium')
   const [reviewingId, setReviewingId] = useState('')
   const [reviewError, setReviewError] = useState('')
+  const [galleryFilter, setGalleryFilter] = useState<GalleryFilter>('All')
+  const [photos, setPhotos] = useState<EvidenceRecord[]>([])
+  const [photosLoading, setPhotosLoading] = useState(true)
+  const [photosError, setPhotosError] = useState('')
+  const [photoError, setPhotoError] = useState('')
+  const [photoSuccess, setPhotoSuccess] = useState('')
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoProgress, setPhotoProgress] = useState(0)
+  const [previewPhoto, setPreviewPhoto] = useState<GalleryPhotoItem | null>(null)
+  const [demoVideoError, setDemoVideoError] = useState(false)
+  const photoInput = useRef<HTMLInputElement>(null)
+  const sidecarInput = useRef<HTMLInputElement>(null)
   const { notify } = useAppActions()
+
+  async function loadGalleryImages() {
+    setPhotosLoading(true)
+    setPhotosError('')
+    try {
+      const result = await operationsApi.imageEvidence()
+      setPhotos(result.items)
+    } catch (loadError) {
+      setPhotosError(loadError instanceof Error ? loadError.message : 'Could not load saved road photos.')
+    } finally {
+      setPhotosLoading(false)
+    }
+  }
+
+  async function loadDetectionAvailability() {
+    setAvailabilityLoading(true)
+    setAvailabilityError('')
+    try {
+      setAvailability(await roadDetectionApi.availability())
+    } catch (availabilityLoadError) {
+      setAvailability(null)
+      setAvailabilityError(
+        availabilityLoadError instanceof Error
+          ? availabilityLoadError.message
+          : 'Could not check video detection availability.',
+      )
+    } finally {
+      setAvailabilityLoading(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
-    roadDetectionApi.availability().then((result) => {
-      if (active) setAvailability(result)
-    }).catch((availabilityLoadError: unknown) => {
-      if (active) {
-        setAvailabilityError(
-          availabilityLoadError instanceof Error
-            ? availabilityLoadError.message
-            : 'Could not check video detection availability.',
-        )
-      }
-    })
+    void loadDetectionAvailability()
     roadDetectionApi.jobs().then(async (result) => {
       if (!active || result.items.length === 0) return
       setRecentJobs(result.items)
@@ -90,8 +196,18 @@ export function RoadMonitoringPage() {
     }).catch((jobsLoadError: unknown) => {
       if (active) setError(jobsLoadError instanceof Error ? jobsLoadError.message : 'Could not load recent video jobs.')
     })
+    void loadGalleryImages()
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    if (!previewPhoto) return
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setPreviewPhoto(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [previewPhoto])
 
   useEffect(() => {
     if (!file) {
@@ -158,56 +274,193 @@ export function RoadMonitoringPage() {
   function selectSidecar(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null
     setError('')
+    setSidecarError('')
+    setLocationVerified(false)
+    setLocationMessage('')
+    setLocationError('')
+    setLocationAccuracy(null)
+    setLocationOrigin(null)
+    const sidecarVersion = ++locationEditVersion.current
+    setGpsSidecar(null)
+    setSidecarCoordinates(null)
+    setSidecarLoading(false)
     if (!selected) {
-      setGpsSidecar(null)
       return
     }
     if (!selected.name.toLowerCase().endsWith('.json') || selected.size > MAX_SIDECAR_SIZE) {
       setGpsSidecar(null)
-      setError('Choose a JSON GPS sidecar no larger than 64 KB.')
+      setSidecarCoordinates(null)
+      setSidecarError('Choose a JSON GPS sidecar no larger than 64 KB.')
       event.target.value = ''
       return
     }
-    if (latitude || longitude) {
+    if (!['application/json', 'text/json'].includes(selected.type)) {
       setGpsSidecar(null)
-      setError('Use either verified coordinates or a GPS sidecar, not both.')
+      setSidecarCoordinates(null)
+      setSidecarError('The backend requires the GPS sidecar to use the JSON file type.')
       event.target.value = ''
       return
     }
-    setGpsSidecar(selected)
+    if (latitude.trim() || longitude.trim()) {
+      setGpsSidecar(null)
+      setSidecarCoordinates(null)
+      setSidecarError('Use either footage coordinates or a GPS sidecar, not both.')
+      event.target.value = ''
+      return
+    }
+    setSidecarLoading(true)
+    void selected.text().then((contents) => {
+      const coordinates = parseGpsSidecar(contents)
+      if (sidecarVersion !== locationEditVersion.current) return
+      setGpsSidecar(selected)
+      setSidecarCoordinates(coordinates)
+    }).catch((sidecarLoadError: unknown) => {
+      if (sidecarVersion !== locationEditVersion.current) return
+      setGpsSidecar(null)
+      setSidecarCoordinates(null)
+      setSidecarError(sidecarLoadError instanceof Error ? sidecarLoadError.message : 'Could not read the GPS sidecar.')
+      event.target.value = ''
+    }).finally(() => {
+      if (sidecarVersion === locationEditVersion.current) setSidecarLoading(false)
+    })
+  }
+
+  function clearSidecar() {
+    locationEditVersion.current += 1
+    setGpsSidecar(null)
+    setSidecarCoordinates(null)
+    setSidecarError('')
+    setSidecarLoading(false)
+    setLocationVerified(false)
+    if (sidecarInput.current) sidecarInput.current.value = ''
+  }
+
+  function updateFootageCoordinate(field: 'latitude' | 'longitude', value: string) {
+    locationEditVersion.current += 1
+    if (field === 'latitude') setLatitude(value)
+    else setLongitude(value)
+    const otherCoordinate = field === 'latitude' ? longitude.trim() : latitude.trim()
+    setLocationOrigin(value.trim() || otherCoordinate ? 'manual' : null)
+    setLocationVerified(false)
+    setLocationAccuracy(null)
+    setLocationMessage('')
+    setLocationError('')
+  }
+
+  function detectDeviceLocation() {
+    setLocationError('')
+    setLocationMessage('')
+    setLocationAccuracy(null)
+    if (gpsSidecar) {
+      setLocationError('Remove the GPS sidecar before detecting or entering coordinates.')
+      return
+    }
+    if (locationOrigin === 'device') {
+      setLatitude('')
+      setLongitude('')
+      setLocationOrigin(null)
+      setLocationVerified(false)
+    }
+    if (!window.isSecureContext) {
+      setLocationError('Browser location requires a secure HTTPS connection. Use HTTPS or localhost, then retry.')
+      return
+    }
+    if (!navigator.geolocation) {
+      setLocationError('This browser does not support location detection. Enter the footage coordinates manually.')
+      return
+    }
+
+    const requestVersion = ++locationEditVersion.current
+    setDetectingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setDetectingLocation(false)
+        if (requestVersion !== locationEditVersion.current) {
+          setLocationMessage('Manual edits made during detection were kept. Retry if you want to use the device location.')
+          return
+        }
+        setLatitude(position.coords.latitude.toFixed(6))
+        setLongitude(position.coords.longitude.toFixed(6))
+        setLocationOrigin('device')
+        setLocationVerified(false)
+        setLocationAccuracy(Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null)
+        setLocationMessage('Location detected successfully. This is your device’s current location, not necessarily where the video was recorded.')
+      },
+      (geolocationError) => {
+        setDetectingLocation(false)
+        if (requestVersion !== locationEditVersion.current) {
+          setLocationMessage('Manual edits made during detection were kept.')
+          return
+        }
+        if (locationOrigin === 'device') {
+          setLatitude('')
+          setLongitude('')
+          setLocationOrigin(null)
+          setLocationVerified(false)
+        }
+        setLocationError(geolocationErrorMessage(geolocationError.code))
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+    )
+  }
+
+  async function uploadPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0]
+    event.target.value = ''
+    setPhotoError('')
+    setPhotoSuccess('')
+    if (!selected) return
+    const extension = `.${selected.name.split('.').pop()?.toLowerCase() ?? ''}`
+    const expectedType = allowedImageTypes[extension]
+    if (!expectedType || selected.type !== expectedType) {
+      setPhotoError('Choose a JPEG, PNG, or WebP photo with a matching file type.')
+      return
+    }
+    if (selected.size > MAX_IMAGE_SIZE) {
+      setPhotoError('This photo exceeds the configured 25 MB upload limit.')
+      return
+    }
+    setPhotoUploading(true)
+    setPhotoProgress(0)
+    try {
+      const saved = await operationsApi.uploadEvidence(selected, undefined, setPhotoProgress)
+      setPhotos((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+      setPhotoSuccess(`${saved.original_filename} was saved to private road evidence storage.`)
+      notify('Road photo uploaded successfully.')
+    } catch (uploadError) {
+      setPhotoError(uploadError instanceof Error ? uploadError.message : 'The road photo could not be uploaded.')
+    } finally {
+      setPhotoUploading(false)
+    }
   }
 
   async function requestProcessing() {
     if (!file) return
     setError('')
     setReviewError('')
-    if (Boolean(latitude.trim()) !== Boolean(longitude.trim())) {
-      setError('Enter both coordinates, or leave both blank.')
+    const coordinateResult = parseCoordinatePair(latitude, longitude)
+    if ('error' in coordinateResult) {
+      setError(coordinateResult.error)
       return
     }
-    if (latitude.trim() && !locationVerified) {
-      setError('Confirm that the entered coordinates are verified before uploading.')
+    if (gpsSidecar && coordinateResult.coordinates) {
+      setError('Use either footage coordinates or a GPS sidecar, not both.')
       return
     }
-    if (gpsSidecar && (latitude.trim() || longitude.trim())) {
-      setError('Use either verified coordinates or a GPS sidecar, not both.')
+    if ((coordinateResult.coordinates || gpsSidecar) && !locationVerified) {
+      setError('Confirm that the coordinates match where this footage was captured before uploading.')
       return
     }
-    const parsedLatitude = latitude.trim() ? Number(latitude) : undefined
-    const parsedLongitude = longitude.trim() ? Number(longitude) : undefined
-    if (
-      (parsedLatitude !== undefined && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90))
-      || (parsedLongitude !== undefined && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))
-    ) {
-      setError('Latitude must be between -90 and 90 and longitude between -180 and 180.')
+    if (!coordinateResult.coordinates && !gpsSidecar && locationVerified) {
+      setError('Enter footage coordinates or select a GPS sidecar before confirming the location.')
       return
     }
     setUploading(true)
     setUploadProgress(0)
     try {
       const created = await roadDetectionApi.upload(file, {
-        latitude: parsedLatitude,
-        longitude: parsedLongitude,
+        latitude: coordinateResult.coordinates?.latitude,
+        longitude: coordinateResult.coordinates?.longitude,
         locationVerified,
         gpsSidecar: gpsSidecar ?? undefined,
       }, setUploadProgress)
@@ -215,7 +468,15 @@ export function RoadMonitoringPage() {
       setRecentJobs((current) => [created, ...current.filter((item) => item.id !== created.id)].slice(0, 10))
       notify('Video upload accepted. Processing status is available below.')
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Video upload failed.')
+      const message = uploadError instanceof Error ? uploadError.message : 'Video upload failed.'
+      setError(message)
+      if (uploadError instanceof ApiError && uploadError.status === 503) {
+        setAvailability({
+          available: false,
+          message,
+          classes: [],
+        })
+      }
     } finally {
       setUploading(false)
     }
@@ -254,6 +515,20 @@ export function RoadMonitoringPage() {
   }
 
   const detections = job?.detections ?? []
+  const manualCoordinates = parseCoordinatePair(latitude, longitude)
+  const locationCoordinatesReady = 'coordinates' in manualCoordinates && manualCoordinates.coordinates !== null
+  const footageLocationNeedsConfirmation = Boolean(locationCoordinatesReady || gpsSidecar)
+  const locationValidationError = 'error' in manualCoordinates ? manualCoordinates.error : ''
+  const canSubmitVideo = Boolean(
+    file
+    && availability?.available
+    && !availabilityLoading
+    && !uploading
+    && !sidecarLoading
+    && !sidecarError
+    && !locationValidationError
+    && (!footageLocationNeedsConfirmation || locationVerified),
+  )
   return (
     <>
       <PageHeading
@@ -263,9 +538,27 @@ export function RoadMonitoringPage() {
       />
       <div className={`notice-banner ${availability?.available ? 'notice-banner-blue' : 'notice-banner-amber'}`}>
         <Video size={17} />
-        <p><strong>{availability?.available ? 'Road-damage model ready.' : 'AI detection unavailable.'}</strong>{' '}
-          {availabilityError || availability?.message || 'Checking the configured road-damage model…'}</p>
+        <p><strong>{availabilityLoading ? 'Checking AI model availability.' : availability?.available ? 'Road-damage model ready.' : availabilityError ? 'Could not check AI model availability.' : 'AI detection unavailable.'}</strong>{' '}
+          {availabilityLoading
+            ? 'Checking the configured road-damage model…'
+            : availabilityError || availability?.message || 'Configure the backend model before uploading video.'}</p>
+        {!availabilityLoading && !availability?.available && (
+          <Button disabled={availabilityLoading} icon={RefreshCw} onClick={() => void loadDetectionAvailability()} type="button" variant="secondary">
+            Retry model check
+          </Button>
+        )}
       </div>
+      {!availabilityLoading && !availability?.available && !availabilityError && (
+        <Panel className="model-configuration-panel" subtitle="Video uploads are rejected by the API with HTTP 503 until this check succeeds. The application will not accept the video or create an analysis job without a compatible model." title="Enable real road-damage analysis">
+          <ol>
+            <li>Install the backend optional AI dependencies: <code>python -m pip install -e ".[ai]"</code> from the backend folder.</li>
+            <li>Obtain and evaluate a road-damage model whose class names include a supported label: pothole, crack, longitudinal crack, transverse crack, alligator crack, rutting, D00, D10, D20, or D40.</li>
+            <li>Set <code>ROAD_DAMAGE_MODEL_PATH</code> in the backend environment to the absolute path of that model file. Do not commit model weights to Git.</li>
+            <li>Restart or redeploy the backend, then choose <strong>Retry model check</strong>. Submission enables only after the API confirms a compatible model is ready.</li>
+          </ol>
+          <p>For local setup, put <code>ROAD_DAMAGE_MODEL_PATH=absolute/path/to/your/model.pt</code> in the backend’s private <code>.env</code>. For Render, configure the variable on the backend service and ensure the model file is available at that path after every deploy. See the Road-damage video detection section in the project README for details.</p>
+        </Panel>
+      )}
 
       <div className="road-upload-grid">
         <Panel className="upload-panel" subtitle="Bus and fleet camera footage" title="Video source">
@@ -278,20 +571,182 @@ export function RoadMonitoringPage() {
           </label>
           {error && <p className="field-error" role="alert">{error}</p>}
           {file && <div className="selected-file"><FileVideo2 size={18} /><span><strong>{file.name}</strong><small>{(file.size / (1024 * 1024)).toFixed(1)} MB · selected for upload</small></span><button aria-label="Remove selected video" onClick={() => setFile(null)} type="button"><X size={17} /></button></div>}
-          <label className="field-label" htmlFor="road-latitude">Verified latitude (optional)</label>
-          <input className="form-input" id="road-latitude" inputMode="decimal" onChange={(event) => setLatitude(event.target.value)} placeholder="e.g. 45.5017" type="number" value={latitude} />
-          <label className="field-label" htmlFor="road-longitude">Verified longitude (optional)</label>
-          <input className="form-input" id="road-longitude" inputMode="decimal" onChange={(event) => setLongitude(event.target.value)} placeholder="e.g. -73.5673" type="number" value={longitude} />
-          <label className="checkbox-label"><input checked={locationVerified} onChange={(event) => setLocationVerified(event.target.checked)} type="checkbox" /> I verified these coordinates for this footage</label>
+          <div className="location-entry-heading">
+            <div><strong>Video footage location</strong><span>Optional · choose device detection or enter the capture location manually</span></div>
+            <Button disabled={detectingLocation || Boolean(gpsSidecar) || sidecarLoading} icon={MapPin} onClick={detectDeviceLocation} type="button" variant="primary">
+              {detectingLocation ? 'Detecting location…' : 'Detect My Location'}
+            </Button>
+          </div>
+          <p className="location-privacy-note">Location permission is requested by your browser. Device detection reports where this device is now—it may not be where the video was recorded. For earlier or remote footage, enter its verified capture coordinates instead. HTTPS or localhost is required.</p>
+          <label className="field-label" htmlFor="road-latitude">Footage latitude (optional)</label>
+          <input className="form-input" disabled={Boolean(gpsSidecar) || sidecarLoading} id="road-latitude" inputMode="decimal" max="90" min="-90" onChange={(event) => updateFootageCoordinate('latitude', event.target.value)} placeholder="Enter footage latitude" step="any" type="number" value={latitude} />
+          <label className="field-label" htmlFor="road-longitude">Footage longitude (optional)</label>
+          <input className="form-input" disabled={Boolean(gpsSidecar) || sidecarLoading} id="road-longitude" inputMode="decimal" max="180" min="-180" onChange={(event) => updateFootageCoordinate('longitude', event.target.value)} placeholder="Enter footage longitude" step="any" type="number" value={longitude} />
+          {locationMessage && <p className="location-status" role="status"><CheckCircle2 size={16} />{locationMessage}{locationAccuracy !== null && <> Accuracy: about {Math.round(locationAccuracy)} m.</>}</p>}
+          {locationError && <div className="location-error" role="alert"><p>{locationError}</p><Button disabled={detectingLocation || Boolean(gpsSidecar)} icon={RefreshCw} onClick={detectDeviceLocation} type="button" variant="secondary">Retry</Button></div>}
+          <label className={`checkbox-label location-confirmation${locationOrigin === 'device' ? ' location-confirmation-device' : ''}`}>
+            <input checked={locationVerified} disabled={!sidecarCoordinates && !locationCoordinatesReady} onChange={(event) => setLocationVerified(event.target.checked)} type="checkbox" />
+            {gpsSidecar ? 'I confirm the GPS sidecar coordinates match where this footage was captured' : 'I confirm these coordinates match where this footage was captured'}
+          </label>
           <label className="field-label" htmlFor="road-gps-sidecar">GPS sidecar (optional JSON)</label>
-          <input accept=".json,application/json" disabled={Boolean(latitude || longitude)} id="road-gps-sidecar" onChange={selectSidecar} type="file" />
+          <input accept=".json,application/json" disabled={Boolean(latitude.trim() || longitude.trim()) || sidecarLoading} id="road-gps-sidecar" onChange={selectSidecar} ref={sidecarInput} type="file" />
+          <p className="location-help">Sidecar JSON must contain numeric <code>latitude</code> and <code>longitude</code> values. It is validated here and again by the backend (JSON file, maximum 64 KB).</p>
+          {sidecarLoading && <div className="location-loading" role="status">Validating GPS sidecar…</div>}
+          {sidecarCoordinates && gpsSidecar && <div className="sidecar-selected"><span><strong>{gpsSidecar.name}</strong><small>Coordinates: {sidecarCoordinates.latitude}, {sidecarCoordinates.longitude}</small></span><button onClick={clearSidecar} type="button">Remove</button></div>}
+          {sidecarError && <p className="field-error" role="alert">{sidecarError}</p>}
           {uploading && <div aria-label={`Upload progress ${uploadProgress}%`} aria-valuemax={100} aria-valuemin={0} aria-valuenow={uploadProgress} className="upload-progress" role="progressbar"><span style={{ width: `${uploadProgress}%` }} /></div>}
-          <div className="upload-actions"><Button disabled={!file || !availability?.available || uploading} icon={Upload} onClick={() => void requestProcessing()} variant="primary">{uploading ? `Uploading ${uploadProgress}%` : 'Submit for analysis'}</Button><span>{availability?.available ? 'Requires engineer authorization' : 'Upload enabled when a compatible model is configured'}</span></div>
+          <div className="upload-actions"><Button disabled={!canSubmitVideo} icon={Upload} onClick={() => void requestProcessing()} variant="primary">{uploading ? `Uploading ${uploadProgress}%` : 'Submit for analysis'}</Button><span>{availabilityLoading ? 'Checking model availability…' : !availability?.available ? 'Configure a compatible model to enable upload' : !file ? 'Choose a video to continue' : locationValidationError || (footageLocationNeedsConfirmation && !locationVerified) ? 'Confirm valid footage coordinates or remove them' : 'Requires engineer authorization'}</span></div>
         </Panel>
         <Panel className="video-preview-panel" subtitle={file ? 'Local browser preview' : 'Preview appears after selecting a file'} title="Footage preview">
           {previewUrl ? <video className="road-video-preview" controls src={previewUrl}>Your browser does not support video preview.</video> : <div className="video-preview-empty"><span><FileVideo2 size={26} /></span><strong>No footage selected</strong><small>Choose a supported MP4 or MOV file to preview it.</small></div>}
         </Panel>
       </div>
+
+      <Panel
+        className="media-gallery-panel"
+        subtitle="Licensed samples are clearly labeled and kept separate from CityLens uploads, saved evidence, and AI results."
+        title="Demo Videos & Photos"
+        action={<span className="gallery-count">{recentJobs.length} uploaded videos · {photos.length} uploaded photos · {demoRoadPhotos.length + 1} demo samples</span>}
+      >
+        <div aria-label="Filter road media" className="gallery-tabs" role="group">
+          {(['All', 'Videos', 'Road Damage Photos', 'AI Analysis'] as const).map((filter) => (
+            <button
+              aria-pressed={galleryFilter === filter}
+              className={galleryFilter === filter ? 'gallery-tab gallery-tab-active' : 'gallery-tab'}
+              key={filter}
+              onClick={() => setGalleryFilter(filter)}
+              type="button"
+            >
+              {filter}
+            </button>
+          ))}
+        </div>
+        <input
+          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+          className="visually-hidden"
+          onChange={(event) => void uploadPhoto(event)}
+          ref={photoInput}
+          type="file"
+        />
+        {(galleryFilter === 'All' || galleryFilter === 'Road Damage Photos') && (
+          <section aria-label="Road damage photos" className="gallery-section">
+            <div className="gallery-section-heading">
+              <div><h3>Road damage photos</h3><p>Uploaded photos stay separate from the licensed demo samples below.</p></div>
+              <Button disabled={photoUploading} icon={Images} onClick={() => photoInput.current?.click()} variant="secondary">
+                {photoUploading ? `Uploading ${photoProgress}%` : 'Upload Photos'}
+              </Button>
+            </div>
+            {photoUploading && <div aria-label={`Photo upload progress ${photoProgress}%`} aria-valuemax={100} aria-valuemin={0} aria-valuenow={photoProgress} className="upload-progress gallery-progress" role="progressbar"><span style={{ width: `${photoProgress}%` }} /></div>}
+            {photoError && <p className="field-error gallery-message" role="alert">{photoError}</p>}
+            {photoSuccess && <p className="gallery-success" role="status"><CheckCircle2 size={15} />{photoSuccess}</p>}
+            {photosError && <div className="gallery-load-error" role="alert"><p>{photosError}</p><Button icon={RefreshCw} onClick={() => void loadGalleryImages()} variant="secondary">Retry</Button></div>}
+            {photosLoading ? <div className="gallery-loading" role="status">Loading saved photos…</div> : photos.length > 0 ? (
+              <div className="photo-card-grid">
+                {photos.map((photo) => (
+                  <article className="photo-card" key={photo.id}>
+                    <button aria-label={`Enlarge ${photo.original_filename}`} className="photo-preview-button" onClick={() => setPreviewPhoto({
+                      id: photo.id,
+                      title: photo.original_filename,
+                      src: apiUrl(`/evidence/${photo.id}/preview`),
+                      description: 'Private road evidence uploaded to CityLens',
+                      demo: false,
+                    })} type="button">
+                      <img alt={photo.original_filename} crossOrigin="use-credentials" loading="lazy" src={apiUrl(`/evidence/${photo.id}/preview`)} />
+                      <span className="photo-zoom-label"><ImageIcon size={15} /> Enlarge</span>
+                    </button>
+                    <div className="photo-card-copy"><strong title={photo.original_filename}>{photo.original_filename}</strong><span>{new Date(photo.created_at).toLocaleDateString()}</span></div>
+                  </article>
+                ))}
+              </div>
+            ) : !photosError && <EmptyState icon={FileImage} title="No road photos uploaded" description="Your uploaded road photos will appear here. Demo samples are shown separately below." />}
+            <div className="gallery-sample-heading"><DemoTag>DEMO SAMPLE</DemoTag><p>Publicly licensed road photos; not uploaded CityLens evidence.</p></div>
+            <div className="photo-card-grid">
+              {demoRoadPhotos.map((photo) => (
+                <article className="photo-card" key={photo.id}>
+                  <button aria-label={`Enlarge demo sample: ${photo.title}`} className="photo-preview-button" onClick={() => setPreviewPhoto(photo)} type="button">
+                    <img alt={`Demo sample photo: ${photo.title}`} loading="lazy" src={photo.src} />
+                    <span className="photo-zoom-label"><ImageIcon size={15} /> Enlarge</span>
+                  </button>
+                  <div className="photo-card-copy photo-card-copy-demo">
+                    <strong title={photo.title}>{photo.title}</strong>
+                    <DemoTag>Demo Sample</DemoTag>
+                    <a className="gallery-credit" href={photo.sourceUrl} rel="noreferrer" target="_blank">{photo.credit} · Wikimedia Commons</a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+        {(galleryFilter === 'All' || galleryFilter === 'Videos') && (
+          <section aria-label="Uploaded road videos" className="gallery-section">
+            <div className="gallery-section-heading"><div><h3>Demo video</h3><p>A publicly licensed road clip to preview the video player. It is not your city's footage or AI analysis.</p></div></div>
+            <div className="video-card-grid video-card-grid-samples">
+              <article className="media-video-card">
+                <video controls playsInline preload="metadata" poster={demoVideo.poster} src={demoVideo.src} onCanPlay={() => setDemoVideoError(false)} onError={() => setDemoVideoError(true)}>
+                  Your browser does not support WebM video playback.
+                </video>
+                <div className="media-video-copy">
+                  <div className="media-video-title-row"><h4 title={demoVideo.title}>{demoVideo.title}</h4><DemoTag>Demo Sample</DemoTag></div>
+                  <p>{demoVideo.description}</p>
+                  {demoVideoError && <p className="gallery-media-error" role="alert">This browser could not play the WebM clip. <a download href={demoVideo.src}>Download the demo video</a>.</p>}
+                  <div className="media-video-meta"><a className="gallery-credit" href={demoVideo.sourceUrl} rel="noreferrer" target="_blank">{demoVideo.credit} · Wikimedia Commons</a><span>360p WebM</span></div>
+                </div>
+              </article>
+            </div>
+            <div className="gallery-section-heading gallery-uploaded-heading"><div><h3>Uploaded videos</h3><p>Playback uses the authenticated video saved for each processing job.</p></div></div>
+            {recentJobs.length > 0 ? (
+              <div className="video-card-grid">
+                {recentJobs.map((item) => (
+                  <article className="media-video-card" key={item.id}>
+                    <video controls crossOrigin="use-credentials" preload="metadata" src={apiUrl(item.video_url)}>
+                      Your browser does not support this video format.
+                    </video>
+                    <div className="media-video-copy">
+                      <div className="media-video-title-row"><h4 title={item.original_filename}>{item.original_filename}</h4><StatusBadge label={item.status} /></div>
+                      <p>{item.status_message || 'Uploaded for processing by the configured road-damage model.'}</p>
+                      <div className="media-video-meta"><span>Duration unavailable</span><span>{new Date(item.created_at).toLocaleString()}</span></div>
+                      <Button onClick={() => { setGalleryFilter('AI Analysis'); void selectJob(item.id) }} variant="secondary">View AI analysis</Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : <EmptyState icon={FileVideo2} title="No uploaded videos" description="Real videos appear here only after an authenticated upload creates a processing job. The demo clip is not your own upload." />}
+          </section>
+        )}
+        {galleryFilter === 'AI Analysis' && (
+          <section aria-label="Actual AI analysis" className="gallery-section">
+            <div className="gallery-section-heading"><div><h3>AI analysis</h3><p>Detection data and frame evidence returned by the configured model.</p></div>
+              {recentJobs.length > 0 && <label className="gallery-job-select">Video job<select className="form-input" onChange={(event) => void selectJob(event.target.value)} value={job?.id ?? ''}>{recentJobs.map((item) => <option key={item.id} value={item.id}>{item.original_filename} · {item.status}</option>)}</select></label>}
+            </div>
+            {job ? (
+              <div className="analysis-layout">
+                <article className="analysis-source">
+                  <video controls crossOrigin="use-credentials" preload="metadata" src={apiUrl(job.video_url)}>Your browser does not support this video format.</video>
+                  <div className="analysis-source-copy"><strong>{job.original_filename}</strong><StatusBadge label={job.status} />{job.latitude !== null && job.longitude !== null && <span>Verified location: {job.latitude}, {job.longitude}</span>}</div>
+                  {(job.status === 'Pending' || job.status === 'Processing') && <div aria-label={`Processing progress ${job.progress}%`} aria-valuemax={100} aria-valuemin={0} aria-valuenow={job.progress} className="upload-progress" role="progressbar"><span style={{ width: `${job.progress}%` }} /></div>}
+                  {job.status === 'Failed' && <p className="field-error" role="alert">{job.status_message || 'Video processing failed.'}</p>}
+                </article>
+                <div className="analysis-detections">
+                  {detections.length > 0 ? detections.map((detection) => (
+                    <article className="analysis-detection-card" key={detection.id}>
+                      {detection.evidence_url ? <img alt={`${detection.class_name} detected at ${detection.video_timestamp_seconds.toFixed(1)} seconds`} crossOrigin="use-credentials" loading="lazy" src={apiUrl(detection.evidence_url)} /> : <div className="analysis-frame-unavailable">Frame unavailable</div>}
+                      <div><h4>{detection.class_name}</h4><p>{(detection.confidence * 100).toFixed(1)}% confidence · {new Date(detection.video_timestamp_seconds * 1000).toISOString().slice(11, 19)}</p><StatusBadge label={detection.review_status} /></div>
+                    </article>
+                  )) : job.status === 'Completed' ? <EmptyState icon={ImageIcon} title="No supported damage detections" description="The model completed this uploaded video and returned no supported road-damage detections." /> : <EmptyState icon={FileVideo2} title="Analysis not ready" description={job.status_message || 'Actual model results will appear here when processing completes.'} />}
+                </div>
+              </div>
+            ) : <EmptyState icon={ImageIcon} title="No analysis available" description="Upload a video and let the configured model process it to see actual detections." />}
+          </section>
+        )}
+      </Panel>
+
+      {previewPhoto && <div className="gallery-modal-backdrop" onClick={() => setPreviewPhoto(null)}>
+        <section aria-labelledby="gallery-preview-title" aria-modal="true" className="gallery-photo-modal" onClick={(event) => event.stopPropagation()} role="dialog">
+          <div className="gallery-modal-heading"><h2 id="gallery-preview-title">{previewPhoto.title}</h2><button aria-label="Close photo preview" onClick={() => setPreviewPhoto(null)} type="button"><X size={18} /></button></div>
+          {previewPhoto.demo && <p className="gallery-preview-note"><DemoTag>DEMO SAMPLE</DemoTag>{previewPhoto.description}<a className="gallery-credit" href={previewPhoto.sourceUrl} rel="noreferrer" target="_blank">{previewPhoto.credit} · Wikimedia Commons</a></p>}
+          <img alt={previewPhoto.title} crossOrigin={previewPhoto.demo ? undefined : 'use-credentials'} src={previewPhoto.src} />
+        </section>
+      </div>}
 
       {recentJobs.length > 0 && <Panel subtitle="Your latest persisted processing jobs" title="Recent video jobs">
         <label className="field-label" htmlFor="recent-video-jobs">Select a job</label>

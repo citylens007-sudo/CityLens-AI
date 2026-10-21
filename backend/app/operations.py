@@ -726,6 +726,21 @@ def upload_evidence(
     return evidence
 
 
+@router.get("/evidence/images", response_model=PaginatedResponse[EvidenceRead])
+def list_image_evidence(
+    actor: CurrentUser,
+    db: DatabaseSession,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> PaginatedResponse[EvidenceRead]:
+    if actor.role not in {UserRole.ADMIN, UserRole.MUNICIPAL_ENGINEER}:
+        raise HTTPException(status_code=403, detail="Your role cannot access the road media gallery")
+    filters = (Evidence.evidence_type == EvidenceType.IMAGE,)
+    statement = select(Evidence).where(*filters).order_by(Evidence.created_at.desc())
+    count_statement = select(func.count()).select_from(Evidence).where(*filters)
+    return _page(db, statement, count_statement, limit, offset)
+
+
 @router.get("/evidence/{evidence_id}", response_model=EvidenceRead)
 def get_evidence(evidence_id: UUID, actor: CurrentUser, db: DatabaseSession) -> Evidence:
     evidence = db.get(Evidence, evidence_id)
@@ -734,6 +749,22 @@ def get_evidence(evidence_id: UUID, actor: CurrentUser, db: DatabaseSession) -> 
     if not _can_access_evidence(evidence, actor, db):
         raise HTTPException(status_code=403, detail="You cannot access this evidence")
     return evidence
+
+
+@router.get("/evidence/{evidence_id}/preview")
+def preview_evidence(evidence_id: UUID, actor: CurrentUser, db: DatabaseSession) -> FileResponse:
+    evidence = db.get(Evidence, evidence_id)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    if not _can_access_evidence(evidence, actor, db):
+        raise HTTPException(status_code=403, detail="You cannot access this evidence")
+    if evidence.evidence_type != EvidenceType.IMAGE:
+        raise HTTPException(status_code=415, detail="Only image evidence can be previewed")
+    root = settings.evidence_storage_path.resolve()
+    path = Path(evidence.file_path).resolve()
+    if path.parent != root or not path.is_file():
+        raise HTTPException(status_code=404, detail="Evidence file is unavailable")
+    return FileResponse(path, media_type=evidence.content_type, content_disposition_type="inline")
 
 
 @router.get("/evidence/{evidence_id}/download")

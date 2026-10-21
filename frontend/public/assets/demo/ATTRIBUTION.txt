@@ -1,0 +1,24 @@
+Demo road media sources and licenses
+
+Video
+- "Cars Moving into pothole.webm" by Amuzujoe.
+- Source: https://commons.wikimedia.org/wiki/File:Cars_Moving_into_pothole.webm
+- License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
+- This application bundles the Wikimedia Commons 360p VP9 WebM transcode without edits.
+
+Photos
+- "A pothole in Dilova Street in Kyiv.jpg" by Роман Рябенко.
+- Source: https://commons.wikimedia.org/wiki/File:A_pothole_in_Dilova_Street_in_Kyiv.jpg
+- License: CC0 1.0 Universal. Bundled as a 960px Wikimedia Commons thumbnail.
+
+- "Old cracked asphalt road, Mužilovčica.jpg" by Mnalis.
+- Source: https://commons.wikimedia.org/wiki/File:Old_cracked_asphalt_road,_Mu%C5%BEilov%C4%8Dica.jpg
+- License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
+- Bundled as a 960px Wikimedia Commons thumbnail.
+
+- "Straßenschäden viele Schlaglöcher, katastrophaler Asphaltbelag (2024-08-11) 05.jpg" by Goestratal!.
+- Source: https://commons.wikimedia.org/wiki/File:Stra%C3%9Fensch%C3%A4den_viele_Schlagl%C3%B6cher,_katastrophaler_Asphaltbelag_(2024-08-11)_05.jpg
+- License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
+- Bundled as a 960px Wikimedia Commons thumbnail.
+
+The demo samples are public media and are not CityLens user uploads or AI output.

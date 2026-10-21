@@ -1,0 +1,111 @@
+{
+  "planHash": "2de4c264b1efaf9455735db546ab66fe310383c511fb156aa6fe564d49442b3d",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-10-21T12:44:31.3611470Z",
+  "retryCount": 2,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 62058,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "production-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E citylens-frontend@0.1.0 build\r\n\u003E tsc -b \u0026\u0026 vite build\r\n\r\n\u001B[36mvite v8.3.4 \u001B[32mbuilding client environment for production...\u001B[36m\u001B[39m\r\ntransforming...\r\n\u2713 2561 modules transformed.\r\nrendering chunks...\r\ncomputing gzip size...\r\ndist/index.html                               0.85 kB \u2502 gzip:   0.46 kB\r\ndist/assets/MapView-vh-t_kPv.css             15.09 kB \u2502 gzip:   6.36 kB\r\ndist/assets/index-Bu8xiLJE.css               61.78 kB \u2502 gzip:  13.99 kB\r\ndist/assets/arrow-right-DmnCPqmn.js           0.19 kB \u2502 gzip:   0.18 kB\r\ndist/assets/loader-circle-Cl5Pam8f.js         0.19 kB \u2502 gzip:   0.18 kB\r\ndist/assets/clock-3-Cb5ksJD6.js               0.19 kB \u2502 gzip:   0.18 kB\r\ndist/assets/circle-check-CzC51OOz.js          0.23 kB \u2502 gzip:   0.20 kB\r\ndist/assets/upload-xF55vHGr.js                0.25 kB \u2502 gzip:   0.21 kB\r\ndist/assets/triangle-alert-DhiSi1wT.js        0.32 kB \u2502 gzip:   0.24 kB\r\ndist/assets/shield-check-4zxltHxF.js          0.34 kB \u2502 gzip:   0.26 kB\r\ndist/assets/refresh-cw-EhiKSUpu.js            0.35 kB \u2502 gzip:   0.24 kB\r\ndist/assets/file-image-12T3xGSk.js            0.42 kB \u2502 gzip:   0.29 kB\r\ndist/assets/funnel-DV-P3k9f.js                0.44 kB \u2502 gzip:   0.30 kB\r\ndist/assets/file-video-camera-DcxM3axv.js     0.49 kB \u2502 gzip:   0.34 kB\r\ndist/assets/DashboardMapPanel-bUsOuozl.js     0.50 kB \u2502 gzip:   0.34 kB\r\ndist/assets/wrench-DF73O6E_.js                0.61 kB \u2502 gzip:   0.37 kB\r\ndist/assets/DashboardCharts-B0PUjQjk.js       2.31 kB \u2502 gzip:   0.93 kB\r\ndist/assets/demo-BCqvo2h6.js                  4.12 kB \u2502 gzip:   1.12 kB\r\ndist/assets/LoginPage-D6qCcfk0.js             8.44 kB \u2502 gzip:   2.94 kB\r\ndist/assets/ResidentPublicPage-CxvbfyBD.js    9.16 kB \u2502 gzip:   2.99 kB\r\ndist/assets/DashboardPage-Csk--e7b.js        10.22 kB \u2502 gzip:   2.85 kB\r\ndist/assets/UsersPage-B8QJf7CD.js            14.43 kB \u2502 gzip:   4.71 kB\r\ndist/assets/RepairPages-DnT3L-1c.js          15.83 kB \u2502 gzip:   4.20 kB\r\ndist/assets/TrafficPages-BZVaV5qS.js         23.89 kB \u2502 gzip:   6.51 kB\r\ndist/assets/AnalyticsPage-BmurtBK4.js        27.26 kB \u2502 gzip:   8.58 kB\r\ndist/assets/RoadPages-xYavMnYy.js            35.45 kB \u2502 gzip:   9.64 kB\r\ndist/assets/MapView-CL7iEy1r.js             153.20 kB \u2502 gzip:  45.01 kB\r\ndist/assets/index-CSq6klYL.js               265.44 kB \u2502 gzip:  85.02 kB\r\ndist/assets/PieChart-B0-2D9cC.js            374.96 kB \u2502 gzip: 107.44 kB\r\n\r\n\u001B[32m\u2713 built in 6.23s\u001B[39m\r\n\u001B[33m\u001B[33m[PLUGIN_TIMINGS] \u001B[0mJavaScript callbacks ran for 2.4s of this 6.2s build (39%).\r\nThe slowest callbacks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):\r\n  - plugin vite:css transform (23%, 1.4s, 2 calls)\r\nAdditional callback time came from callbacks under 1s.\r\nSee https://rolldown.rs/reference/InputOptions.checks#bundlertimings for more details.\r\n\u001B[39m\r\n",
+        "durationMs": 17028
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E citylens-frontend@0.1.0 test\r\n\u003E vitest run\r\n\r\n\r\n RUN  v5.0.5 C:/Users/coc25/OneDrive/Documents/City Lens AI/frontend\r\n\r\n\r\n Test Files  1 passed (1)\r\n      Tests  2 passed (2)\r\n   Start at  18:14:26\r\n   Duration  1.47s (transform 46%, tests 24%, worker 15%, import 15%)\r\n\r\n",
+        "durationMs": 6845,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 2,
+          "testsPassed": 2,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "dev-server-serves-home",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\r\n\u003Chtml lang=\u0022en\u0022\u003E\r\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\r\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\r\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\r\n    \u003Cmeta name=\u0022theme-color\u0022 content=\u0022#101d32\u0022 /\u003E\r\n    \u003Cmeta name=\u0022description\u0022 content=\u0022CityLens AI municipal road and traffic operations dashboard\u0022 /\u003E\r\n    \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.googleapis.com\u0022 /\u003E\r\n    \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.gstatic.com\u0022 crossorigin /\u003E\r\n    \u003Clink href=\u0022https://fonts.googleapis.com/css2?family=Plus\u002BJakarta\u002BSans:wght@400;500;600;700;800\u0026display=swap\u0022 rel=\u0022stylesheet\u0022 /\u003E\r\n    \u003Ctitle\u003ECityLens AI | City Operations\u003C/title\u003E\r\n  \u003C/head\u003E\r\n  \u003Cbody\u003E\r\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\r\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.tsx\u0022\u003E\u003C/script\u003E\r\n  \u003C/body\u003E\r\n\u003C/html\u003E\n--- server output ---\n\r\n\u003E citylens-frontend@0.1.0 dev\r\n\u003E vite --host 127.0.0.1\r\n\r\n\r\n  \u001B[32m\u001B[1mVITE\u001B[22m v8.3.4\u001B[39m  \u001B[2mready in \u001B[0m\u001B[1m1361\u001B[22m\u001B[2m\u001B[0m ms\u001B[22m\r\n\r\n  \u001B[32m\u279C\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://127.0.0.1:\u001B[1m5173\u001B[22m/\u001B[39m\r\n",
+        "durationMs": 3007
+      }
+    ],
+    "executions": [
+      {
+        "source": "setup[0]",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "ci"
+        ],
+        "cwd": "C:\\Users\\coc25\\OneDrive\\Documents\\City Lens AI\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "production-build",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "C:\\Users\\coc25\\OneDrive\\Documents\\City Lens AI\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "C:\\Users\\coc25\\OneDrive\\Documents\\City Lens AI\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "dev-server-serves-home",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "dev",
+          "--",
+          "--host",
+          "127.0.0.1"
+        ],
+        "cwd": "C:\\Users\\coc25\\OneDrive\\Documents\\City Lens AI\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

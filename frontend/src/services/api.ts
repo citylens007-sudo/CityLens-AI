@@ -197,6 +197,7 @@ export interface RoadDetectionJob {
   progress: number
   status_message: string | null
   original_filename: string
+  video_url: string
   latitude: number | null
   longitude: number | null
   location_source: 'sidecar' | 'user_verified' | null
@@ -366,12 +367,36 @@ export const operationsApi = {
     apiRequest<PoliceAlert>('/alerts', { method: 'POST', body: JSON.stringify({ incident_id, assigned_police_user_id }) }),
   updateAlert: (id: string, update: { alert_status?: PoliceAlertStatus; investigation_notes?: string | null }) =>
     apiRequest<PoliceAlert>(`/alerts/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(update) }),
-  uploadEvidence: (file: File, defectId?: string) => {
+  uploadEvidence: (file: File, defectId?: string, onProgress?: (progress: number) => void) => {
     const body = new FormData()
     body.append('file', file)
     if (defectId) body.append('defect_id', defectId)
-    return apiRequest<EvidenceRecord>('/evidence/upload', { method: 'POST', body })
+    if (!onProgress) return apiRequest<EvidenceRecord>('/evidence/upload', { method: 'POST', body })
+    return new Promise<EvidenceRecord>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', apiUrl('/evidence/upload'))
+      xhr.withCredentials = true
+      xhr.responseType = 'json'
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100))
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.response as EvidenceRecord)
+          return
+        }
+        if (xhr.status === 401) window.dispatchEvent(new Event('citylens:session-expired'))
+        reject(xhrError(xhr))
+      }
+      xhr.onerror = () => reject(new ApiError(
+        'The CityLens API could not be reached. Check that the backend is running.',
+        0,
+      ))
+      xhr.send(body)
+    })
   },
+  imageEvidence: (limit = 50, offset = 0) =>
+    apiRequest<Page<EvidenceRecord>>(`/evidence/images?limit=${limit}&offset=${offset}`),
   evidence: (id: string) => apiRequest<EvidenceRecord>(`/evidence/${encodeURIComponent(id)}`),
 }
 
